@@ -14,16 +14,16 @@ export default function App() {
   const [dailyLogs, setDailyLogs] = useState<any[]>([]);
   const [monthlyLogs, setMonthlyLogs] = useState<any[]>([]);
 
-  // ดึงข้อมูลจาก Supabase เมื่อเปิดเว็บ
+  // 1. ดึงข้อมูลล่าสุดจาก Supabase เมื่อเปิดเว็บ
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
     const { data: walletData } = await supabase.from('wallets').select('*');
-    if (walletData) {
+    if (walletData && walletData.length > 0) {
       const walletObj: any = {};
-      walletData.forEach(item => { walletObj[item.id] = item.balance; });
+      walletData.forEach(item => { walletObj[item.id] = Number(item.balance) || 0; });
       setWallets(prev => ({ ...prev, ...walletObj }));
     }
 
@@ -34,18 +34,25 @@ export default function App() {
     if (monthlyData) setMonthlyLogs(monthlyData);
   };
 
-  // ฟังก์ชันเติมเงิน
+  // 2. ฟังก์ชันเติมเงิน + บันทึกลง Supabase ทันที
   const handleTopUp = async (key: WalletKeys, customAmount?: number | string) => {
     const addAmount = customAmount !== undefined && customAmount !== '' ? Number(customAmount) : 100;
     if (isNaN(addAmount) || addAmount <= 0) return;
 
     const newBalance = (wallets[key] || 0) + addAmount;
+    
+    // อัปเดตหน้าจอทันที
     setWallets(prev => ({ ...prev, [key]: newBalance }));
 
-    await supabase.from('wallets').upsert({ id: key, balance: newBalance });
+    // บันทึกลง Supabase ฐานข้อมูลจริง
+    const { error } = await supabase.from('wallets').upsert({ id: key, balance: newBalance });
+    if (error) {
+      console.error('Error updating wallet:', error);
+      alert('บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
+    }
   };
 
-  // ฟังก์ชันอัปเดตสถานะคืนเงิน
+  // 3. ฟังก์ชันอัปเดตสถานะคืนเงิน
   const toggleRepaid = async (id: number, currentStatus: boolean) => {
     const updatedStatus = !currentStatus;
     setMonthlyLogs(prev => prev.map(item => item.id === id ? { ...item, is_repaid: updatedStatus } : item));
